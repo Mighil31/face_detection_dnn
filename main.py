@@ -1,4 +1,12 @@
-# import libraries
+# USAGE
+# python train_model.py --embeddings output/embeddings.pickle --recognizer output/recognizer.pickle --le output/le.pickle
+
+# import the necessary packages
+from sklearn.preprocessing import LabelEncoder
+from sklearn.svm import SVC
+import argparse
+import pickle
+from nltk.classify.scikitlearn import SklearnClassifier
 import os
 import cv2
 import imutils
@@ -18,25 +26,27 @@ detector = cv2.dnn.readNetFromCaffe(protoPath, modelPath)
 print("Loading Face Recognizer...")
 embedder = cv2.dnn.readNetFromTorch("openface_nn4.small2.v1.t7")
 
-# load the actual face recognition model along with the label encoder
-# recognizer = pickle.loads(open("output/recognizer.pickle", "rb").read())
-# le = pickle.loads(open("output/le.pickle", "rb").read())
+# load the face embeddings
+print("[INFO] loading face embeddings...")
+data = pickle.loads(open("output/embeddings.pickle", "rb").read())
 
-with open("output/recognizer.pickle", 'rb') as f:
-	recognizer = pickle.loads(f.read(), encoding='bytes') 
-	with open("output/le.pickle", 'rb') as g:
-		le = pickle.loads(g.read(), encoding='bytes') 
+# encode the labels
+print("[INFO] encoding labels...")
+le = LabelEncoder()
+labels = le.fit_transform(data["names"])
 
-		# initialize the video stream, then allow the camera sensor to warm up
-		print("Starting Video Stream...")
-		vs = VideoStream(src=0).start()
-		time.sleep(2.0)
+# train the model used to accept the 128-d embeddings of the face and
+# then produce the actual face recognition
+print("[INFO] training model...")
+recognizer = SVC(probability=True)
+# recognizer = SklearnClassifier(SVC(C=1.0, kernel='linear',probability=True))
+recognizer.fit(data["embeddings"], labels)
+print("Starting Video Stream...")
+vs = VideoStream(src=0).start()
+fps = FPS().start()
 
-# start the FPS throughput estimator
-		fps = FPS().start()
 
-# loop over frames from the video file stream
-		while True:
+while True:
 			# grab the frame from the threaded video stream
 			frame = vs.read()
 
@@ -102,12 +112,3 @@ with open("output/recognizer.pickle", 'rb') as f:
 			# if the `q` key was pressed, break from the loop
 			if key == ord("q"):
 				break
-
-# stop the timer and display FPS information
-fps.stop()
-print("Elasped time: {:.2f}".format(fps.elapsed()))
-print("Approx. FPS: {:.2f}".format(fps.fps()))
-
-# cleanup
-cv2.destroyAllWindows()
-vs.stop()
